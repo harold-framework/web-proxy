@@ -4,3 +4,8 @@ It also sends the ``X-Require-Authentication`` to the Harold middleware to ignor
 
 ## Why is this better?
 Using this acts to proxy requests so clients don't have to know the internal API. It also helps if the harold instance is running on a private domain / IP address.
+
+## Example use:
+
+``my.website/api`` would be the root of the internal API.
+Things like ``my.website/api/example/hello`` would be ``internal.api/example/hello``.
