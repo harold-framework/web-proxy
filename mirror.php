@@ -1,8 +1,6 @@
 <?php
 
 $apiURL = "https://api.myinternal.website";
-$webPath = "https://my.website/mirror.php";
-$filename = "mirror.php";
 
 function displayError( $errMsg ) {
     header("Content-Type: application/json");
@@ -22,8 +20,11 @@ $acceptedMethods = [
 if (!(in_array($method, $acceptedMethods))) { displayError("Unaccepted method."); };
 
 $ch = curl_init();
-$url = $apiURL . str_replace($filename, "", str_replace($webPath, "", $_SERVER["REQUEST_URI"]));
+$url = $apiURL . $_SERVER["PATH_INFO"] . "?" . $_SERVER['QUERY_STRING'];
 curl_setopt($ch, CURLOPT_URL, $url);
+
+echo $url;
+die();
 
 // Forward headers
 $headers = [];
