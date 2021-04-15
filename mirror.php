@@ -23,9 +23,6 @@ $ch = curl_init();
 $url = $apiURL . $_SERVER["PATH_INFO"] . "?" . $_SERVER['QUERY_STRING'];
 curl_setopt($ch, CURLOPT_URL, $url);
 
-echo $url;
-die();
-
 // Forward headers
 $headers = [];
 $disallowedHeaders = [
