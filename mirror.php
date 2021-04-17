@@ -1,6 +1,6 @@
 <?php
 
-$apiURL = "https://api.myinternal.website";
+$apiURL = "https://my.internal.website/";
 
 function displayError( $errMsg ) {
     header("Content-Type: application/json");
@@ -19,55 +19,68 @@ $acceptedMethods = [
 ];
 if (!(in_array($method, $acceptedMethods))) { displayError("Unaccepted method."); };
 
-$ch = curl_init();
-$url = $apiURL . $_SERVER["PATH_INFO"] . "?" . $_SERVER['QUERY_STRING'];
-curl_setopt($ch, CURLOPT_URL, $url);
+try {
 
-// Forward headers
-$headers = [];
-$disallowedHeaders = [
-    "Host",
-    "Accept",
-    "Method"
-];
-foreach (getallheaders() as $k => $v) {
-    if (!(in_array($k, $disallowedHeaders))) { $headers[$k] = $v; };
-}
+    $ch = curl_init();
+    $url = $apiURL . $_SERVER["PATH_INFO"] . "?" . $_SERVER['QUERY_STRING'];
+    $url = rtrim($url, "/?");
 
-// Forcefully require authentication if we're on a whitelisted server.
-$headers["X-Require-Authentication"] = true;
+    curl_setopt($ch, CURLOPT_URL, $url);
 
-// Headers to string based array
-$headersArray = [];
-foreach ($headers as $k => $v) { array_push($headersArray, $k.":".$v); };
+    // Forward headers
+    $headers = [];
+    $disallowedHeaders = [
+        "Host",
+        "Accept",
+        "Method"
+    ];
+    foreach (getallheaders() as $k => $v) {
+        if (!(in_array($k, $disallowedHeaders))) { $headers[$k] = $v; };
+    }
 
-curl_setopt($ch, CURLOPT_HTTPHEADER, $headersArray);
-curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-curl_setopt($ch, CURLOPT_FAILONERROR, true);
-curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
-curl_setopt($ch, CURLOPT_MAXREDIRS, 5);
+    // Forcefully require authentication if we're on a whitelisted server.
+    $headers["X-Require-Authentication"] = true;
 
-switch ($method) {
+    // Headers to string based array
+    $headersArray = [];
+    foreach ($headers as $k => $v) { array_push($headersArray, $k.":".$v); };
+
+    curl_setopt($ch, CURLOPT_HTTPHEADER, $headersArray);
+    curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+    curl_setopt($ch, CURLOPT_FAILONERROR, true);
+    curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
+    curl_setopt($ch, CURLOPT_MAXREDIRS, 5);
+
+    switch ($method) {
+        
+        case "GET":
+            break;
+
+        case "POST":
+            $data = json_decode(file_get_contents('php://input'), true);
+            curl_setopt($ch, CURLOPT_POST, true);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
+            break;
+
+        default:
+            displayError("Switch default, Invalid method.");
+            break;
+
+    }
+
+    $response = curl_exec($ch);
+
+    if ($response === false) {
+        throw new Exception(curl_error($ch), curl_errno($ch));
+    }
+
+    curl_close($ch);
+
+} catch(Exception $e) {
     
-    case "GET":
-        break;
-
-    case "POST":
-        $data = json_decode(file_get_contents('php://input'), true);
-        curl_setopt($ch, CURLOPT_POST, true);
-        curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
-        break;
-
-    default:
-        displayError("Switch default, Invalid method.");
-        break;
+    displayError($e->getCode() . " : " . $e->getMessage());
 
 }
-
-$response = curl_exec($ch);
-curl_close($ch);
-
-if (!($response)) { displayError("Response is unset."); };
 
 header("Content-Type: application/json");
 $response = json_decode($response, true);
