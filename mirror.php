@@ -2,12 +2,23 @@
 
 $apiURL = "https://my.internal.website/";
 
-function displayError( $errMsg ) {
+/*
+    Simply proxy requests from your publically facing website API
+    to your internal/private API at a given route. No main dependencies
+    other than cURL.
+
+    TODO:
+        - Add support for DELETE & PATCH
+        - Preform basic validation on proxy side for POST requests.
+*/
+
+function displayError( $errMsg, $code ) {
     header("Content-Type: application/json");
     echo json_encode([
         "success" => false,
         "error_message" => $errMsg,
-        "location" => "proxy"
+        "location" => "proxy",
+        "code" => $code
     ]);
     die();
 }
@@ -17,7 +28,7 @@ $acceptedMethods = [
     "GET",
     "POST"
 ];
-if (!(in_array($method, $acceptedMethods))) { displayError("Unaccepted method."); };
+if (!(in_array($method, $acceptedMethods))) { displayError("Unaccepted method.", "PROXY_INVALID_METHOD"); };
 
 try {
 
@@ -50,6 +61,7 @@ try {
     curl_setopt($ch, CURLOPT_FAILONERROR, true);
     curl_setopt($ch, CURLOPT_FOLLOWLOCATION, true);
     curl_setopt($ch, CURLOPT_MAXREDIRS, 5);
+    //curl_setopt($ch, CURLOPT_HEADER, 1);
 
     switch ($method) {
         
@@ -59,34 +71,71 @@ try {
         case "POST":
             $data = json_decode(file_get_contents('php://input'), true);
             curl_setopt($ch, CURLOPT_POST, true);
-            curl_setopt($ch, CURLOPT_POSTFIELDS, $data);
+            curl_setopt($ch, CURLOPT_POSTFIELDS, json_encode($data));
+
             break;
 
         default:
-            displayError("Switch default, Invalid method.");
+            displayError("Switch default, Invalid method.", "PROXY_INVALID_METHOD");
             break;
 
     }
+
+    $responseHeaders = [];
+    curl_setopt($ch, CURLOPT_HEADERFUNCTION,
+    function($curl, $header) use (&$responseHeaders) {
+        $len = strlen($header);
+        $header = explode(':', $header, 2);
+        if (count($header) < 2) // ignore invalid headers
+        return $len;
+
+        $responseHeaders[(trim($header[0]))][] = trim($header[1]);
+
+        return $len;
+    }
+    );
 
     $response = curl_exec($ch);
 
     if ($response === false) {
         throw new Exception(curl_error($ch), curl_errno($ch));
     }
-
+    
     curl_close($ch);
+
 
 } catch(Exception $e) {
     
-    displayError($e->getCode() . " : " . $e->getMessage());
+    displayError($e->getCode() . " : " . $e->getMessage(), "PROXY_CURL_EXCEPTION");
 
+}
+
+// Ignore default headers. We're only looking to set specifically set, unknown
+// headers that the API gives us back. Such as a ratelimiting key.
+$ignoreHeaders = ["Date", "Server", "Content-Type", "Keep-alive", "Connection"];
+foreach ($responseHeaders as $k => $v) {
+    foreach ($v as $vk => $vv) {
+        if (!(in_array(ucfirst($k), $ignoreHeaders))) {
+            header($k . ": " . $vv);
+        }
+    }
 }
 
 header("Content-Type: application/json");
 $response = json_decode($response, true);
 if (in_array("success", array_keys($response))) {
-    if (!($response["success"])) { $response["location"] = "api"; };
+    if (!($response["success"])) {
+        // Verify that a "code" response is given.
+
+        if (!(array_key_exists("code", $response))) {
+            // Code error is not given.
+            $response["code"] = "UNKNOWN";
+        }
+        
+        // Add location
+        $response["location"] = "api";
+    };
 }
-if (is_null($response)) { displayError("Failed to gather any response data."); };
+if (is_null($response)) { displayError("Failed to gather any response data.", "PROXY_INVALID_RESPONSE"); };
 echo json_encode($response);
 die();
